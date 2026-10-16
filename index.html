@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Parking Viale Piave - V2.6</title>
+    <title>Parking Viale Piave - V2.7</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Supabase JS Client -->
@@ -244,11 +244,22 @@
         function openAdminModal() {
             activeAdminFormSpot = null;
             renderAdminList();
-            document.getElementById('admin-modal').classList.remove('hidden');
+            document.getElementById('admin-modal').classList.add('hidden');
         }
 
         function closeAdminModal() {
             document.getElementById('admin-modal').classList.add('hidden');
+        }
+
+        function formatCheckinTime(checkinTimeStr) {
+            if (!checkinTimeStr) return '-';
+            if (checkinTimeStr.includes('T') || checkinTimeStr.includes('-')) {
+                const d = new Date(checkinTimeStr);
+                if (!isNaN(d)) {
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+            }
+            return checkinTimeStr; // fallback
         }
 
         function renderAdminList() {
@@ -261,7 +272,7 @@
                 const div = document.createElement('div');
                 div.className = `p-2.5 rounded-xl border text-xs transition ${isOcc ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-900/60 border-slate-700/50'}`;
                 
-                const dispExit = getDisplayExitTime(s.exit_time);
+                const dispExit = getDisplayExitTime(s);
 
                 let html = `
                     <div class="flex items-center justify-between">
@@ -359,7 +370,7 @@
             spot.matricola = matricola;
             spot.plate = plate || 'AUTO';
             spot.exit_time = exitTime;
-            spot.checkin_time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            spot.checkin_time = new Date().toISOString();
 
             await saveSpotToBackend(spotId);
             activeAdminFormSpot = null;
@@ -501,12 +512,12 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // Calcola l'oggetto Date esatto in cui lo stallo si libererà (corretto per la mezzanotte)
-        function getTargetExitDate(exitTimeStr) {
-            if (!exitTimeStr) return null;
+        // Calcola l'oggetto Date esatto dell'uscita basato sul check-in timestamp e sulla scelta dell'utente
+        function getTargetExitDate(spot) {
+            if (!spot || !spot.exit_time) return null;
 
-            const isNextDay = exitTimeStr.includes('+1') || exitTimeStr.toLowerCase().includes('domani');
-            const cleanTime = exitTimeStr.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
+            const isNextDayExplicit = spot.exit_time.includes('+1') || spot.exit_time.toLowerCase().includes('domani');
+            const cleanTime = spot.exit_time.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
 
             if (!cleanTime.includes(':')) return null;
             const parts = cleanTime.split(':');
@@ -515,48 +526,52 @@
 
             if (isNaN(targetHours) || isNaN(targetMinutes)) return null;
 
-            const now = new Date();
-            const target = new Date(now);
+            // Determina la data di base del check-in
+            let baseDate = new Date();
+            if (spot.checkin_time && (spot.checkin_time.includes('T') || spot.checkin_time.includes('-'))) {
+                const checkinDateObj = new Date(spot.checkin_time);
+                if (!isNaN(checkinDateObj)) {
+                    baseDate = checkinDateObj;
+                }
+            }
+
+            const target = new Date(baseDate);
             target.setHours(targetHours, targetMinutes, 0, 0);
 
-            // Se è marcato esplicitamente per il giorno dopo (+1)
-            if (isNextDay) {
+            // Se l'utente ha selezionato esplicitamente "domani" (+1), oppure se l'orario di uscita target 
+            // è cronologicamente inferiore al check-in (es. check-in alle 23:00 e uscita alle 08:00), 
+            // spostiamo la data target al giorno successivo.
+            if (isNextDayExplicit || target <= baseDate) {
                 target.setDate(target.getDate() + 1);
-            } else {
-                // Se l'orario target è già passato rispetto ad adesso, significa che punta al giorno dopo 
-                // (es. sono le 23:00 e l'orario impostato era le 08:00 senza badge)
-                if (target <= now) {
-                    target.setDate(target.getDate() + 1);
-                }
             }
 
             return target;
         }
 
         // Restituisce la stringa dell'orario rimuovendo automaticamente il badge (+1) quando scocca la mezzanotte ed entra nel giorno giusto
-        function getDisplayExitTime(exitTimeStr) {
-            if (!exitTimeStr) return '-';
-            const target = getTargetExitDate(exitTimeStr);
-            if (!target) return exitTimeStr;
+        function getDisplayExitTime(spot) {
+            if (!spot || !spot.exit_time) return '-';
+            const target = getTargetExitDate(spot);
+            if (!target) return spot.exit_time;
 
             const now = new Date();
-            const cleanTime = exitTimeStr.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
+            const cleanTime = spot.exit_time.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
 
-            // Se la data target corrisponde al giorno corrente, il badge +1 sparisce in automatico
+            // Confronto solare: La data del target coincide con la data odierna (oggi)?
             const isToday = (target.getFullYear() === now.getFullYear() &&
                              target.getMonth() === now.getMonth() &&
                              target.getDate() === now.getDate());
 
             if (isToday) {
-                return cleanTime; 
+                return cleanTime; // Rimuove il badge +1 perché è OGGI!
             } else {
-                return cleanTime + ' (+1)';
+                return cleanTime + ' (+1)'; // Mantiene il badge +1 perché è un giorno futuro
             }
         }
 
-        // Calcolo Tempo Residuo corretto al centesimo
-        function calculateRemainingTime(exitTimeStr) {
-            const target = getTargetExitDate(exitTimeStr);
+        // Calcolo del Tempo Residuo perfetto (Scenari 1, 2 e 3)
+        function calculateRemainingTime(spot) {
+            const target = getTargetExitDate(spot);
             if (!target) return 'N/D';
 
             const now = new Date();
@@ -615,8 +630,8 @@
 
             if (mySpotId) {
                 const s = spotsData[mySpotId];
-                const remTime = calculateRemainingTime(s.exit_time);
-                const dispExit = getDisplayExitTime(s.exit_time);
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
                 container.innerHTML = `
                     <div class="flex items-center justify-between mb-3">
                         <h3 class="text-sm font-bold text-rose-400 flex items-center gap-2">
@@ -668,8 +683,9 @@
 
             if (mySpotId) {
                 const s = spotsData[mySpotId];
-                const remTime = calculateRemainingTime(s.exit_time);
-                const dispExit = getDisplayExitTime(s.exit_time);
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
+                const dispCheckin = formatCheckinTime(s.checkin_time);
                 container.innerHTML = `
                     <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
                         <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
@@ -680,7 +696,7 @@
                         <p class="flex justify-between"><strong class="text-slate-400">Nome:</strong> <span>${s.name || '-'} ${s.surname || ''}</span></p>
                         <p class="flex justify-between"><strong class="text-slate-400">Matricola:</strong> <span>${s.matricola || '-'}</span></p>
                         <p class="flex justify-between"><strong class="text-slate-400">Targa:</strong> <span class="font-mono text-white">${s.plate || '-'}</span></p>
-                        <p class="flex justify-between"><strong class="text-slate-400">Orario Check-In:</strong> <span>${s.checkin_time || '-'}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Orario Check-In:</strong> <span>${dispCheckin || '-'}</span></p>
                         <p class="flex justify-between"><strong class="text-slate-400">Uscita Prevista:</strong> <span>${dispExit || '-'}</span></p>
                         <p class="flex justify-between pt-2 border-t border-slate-800 font-bold text-emerald-400"><span>Tempo Residuo:</span> <span>${remTime}</span></p>
                     </div>
@@ -776,7 +792,7 @@
             spot.matricola = '';
             spot.plate = 'AUTO';
             spot.exit_time = exitTime;
-            spot.checkin_time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            spot.checkin_time = new Date().toISOString();
 
             localStorage.setItem('my_assigned_spot', freeSpotId);
             await saveSpotToBackend(freeSpotId);
@@ -814,7 +830,7 @@
             spot.matricola = document.getElementById('input-matricola').value.trim();
             spot.plate = document.getElementById('input-plate').value.trim().toUpperCase();
             spot.exit_time = exitTime;
-            spot.checkin_time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            spot.checkin_time = new Date().toISOString();
 
             localStorage.setItem('my_assigned_spot', spotId);
             await saveSpotToBackend(spotId);
@@ -847,9 +863,10 @@
                 }
             }
 
+            // Ordinamento basato sul target date esatto
             occupiedList.sort((a, b) => {
-                const targetA = getTargetExitDate(a.exit_time);
-                const targetB = getTargetExitDate(b.exit_time);
+                const targetA = getTargetExitDate(a);
+                const targetB = getTargetExitDate(b);
 
                 if (targetA && targetB) {
                     return targetA - targetB;
@@ -863,7 +880,7 @@
             }
 
             occupiedList.forEach(s => {
-                const dispExit = getDisplayExitTime(s.exit_time);
+                const dispExit = getDisplayExitTime(s);
                 const btn = document.createElement('button');
                 btn.className = 'w-full flex items-center justify-between bg-slate-900/60 hover:bg-slate-800/80 border border-slate-700/50 p-2.5 rounded-xl text-xs transition text-left cursor-pointer';
                 btn.onclick = () => openModal(s.id);
@@ -929,15 +946,16 @@
             const actionBtn = document.getElementById('modal-action-btn');
 
             if (s.status === 'occupato') {
-                const remTime = calculateRemainingTime(s.exit_time);
-                const dispExit = getDisplayExitTime(s.exit_time);
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
+                const dispCheckin = formatCheckinTime(s.checkin_time);
                 content.innerHTML = `
                     <p><strong class="text-slate-400">Stato:</strong> <span class="text-rose-400 font-semibold">Occupato</span></p>
                     <p><strong class="text-slate-400">Nome:</strong> ${s.name || '-'}</p>
                     <p><strong class="text-slate-400">Cognome:</strong> ${s.surname || '-'}</p>
                     <p><strong class="text-slate-400">Matricola:</strong> ${s.matricola || '-'}</p>
                     <p><strong class="text-slate-400">Targa:</strong> <span class="font-mono bg-slate-900 px-1.5 py-0.5 rounded text-white">${s.plate || '-'}</span></p>
-                    <p><strong class="text-slate-400">Check-In:</strong> ${s.checkin_time || '-'}</p>
+                    <p><strong class="text-slate-400">Check-In:</strong> ${dispCheckin || '-'}</p>
                     <p><strong class="text-slate-400">Uscita prevista:</strong> <span class="text-emerald-400 font-bold">${dispExit || '-'}</span></p>
                     <p><strong class="text-slate-400">Tempo residuo:</strong> <span class="text-indigo-300 font-semibold">${remTime}</span></p>
                 `;
