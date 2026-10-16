@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Parking Viale Piave V2.1</title>
+    <title>Parking Viale Piave V2.2</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Supabase JS Client -->
@@ -244,7 +244,7 @@
         function openAdminModal() {
             activeAdminFormSpot = null;
             renderAdminList();
-            document.getElementById('admin-modal').classList.remove('hidden');
+            document.getElementById('admin-modal').classList.add('hidden');
         }
 
         function closeAdminModal() {
@@ -483,7 +483,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
-        // Calcolo Tempo Residuo con supporto al giorno successivo (+1)
+        // Calcolo Tempo Residuo con supporto automatico +24h se presente il badge (+1)
         function calculateRemainingTime(exitTimeStr) {
             if (!exitTimeStr) return 'N/D';
             const isNextDay = exitTimeStr.includes('+1');
@@ -639,7 +639,7 @@
 
                 container.innerHTML = `
                     <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
-                        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
                         Nuovo Check-In
                     </h2>
                     <form onsubmit="handleManualCheckIn(event)" class="space-y-4">
@@ -771,7 +771,6 @@
             updateUI();
         }
 
-        // Render "Presto Disponibili" ordinati cronologicamente (Prima Oggi, poi Domani con +1)
         function renderSoonAvailable() {
             const container = document.getElementById('soon-available-list');
             container.innerHTML = '';
@@ -784,13 +783,12 @@
                 }
             }
 
-            // Ordinamento: prima gli orari di oggi (senza +1), poi quelli di domani (+1)
             occupiedList.sort((a, b) => {
                 const isNextA = a.exit_time.includes('+1');
                 const isNextB = b.exit_time.includes('+1');
 
                 if (isNextA !== isNextB) {
-                    return isNextA ? 1 : -1; // "Oggi" viene sempre prima di "Domani (+1)"
+                    return isNextA ? 1 : -1;
                 }
 
                 const cleanA = a.exit_time.replace('(+1)', '').trim();
@@ -804,7 +802,6 @@
             }
 
             occupiedList.forEach(s => {
-                const isNextDay = s.exit_time.includes('+1');
                 const div = document.createElement('div');
                 div.className = 'flex items-center justify-between bg-slate-900/60 border border-slate-700/50 p-2.5 rounded-xl text-xs';
                 div.innerHTML = `
@@ -909,7 +906,7 @@
                 }
             }
 
-            document.getElementById('spot-modal').classList.remove('hidden');
+            document.getElementById('spot-modal').classList.add('hidden');
         }
 
         function closeModal() {
