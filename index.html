@@ -1,0 +1,1062 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Parking Viale Piave - V2.10</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            -webkit-tap-highlight-color: transparent;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white pb-32">
+
+    <!-- DISCLAIMER MODALE INIZIALE -->
+    <div id="disclaimer-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800/95 border border-slate-700 w-full max-w-md rounded-2xl p-6 shadow-2xl relative text-slate-200">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-4 mx-auto border border-indigo-500/30">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <h2 class="text-lg font-bold text-white text-center mb-3">Note Legali & Disclaimer</h2>
+            <p class="text-xs text-slate-300 leading-relaxed text-justify mb-6">
+                Questa applicazione totalmente indipendente è nata per agevolare i colleghi nella gestione del parcheggio di Viale Piave. L'applicazione non è in alcun modo collegata a Trenitalia S.p.a ed RFI e le informazioni in essa contenute potrebbero non rispecchiare la situazione reale del parcheggio cui fa riferimento. Nessuna responsabilità può essere attribuita all'applicazione, al suo creatore e a chi la utilizza. Grazie.
+            </p>
+            <button onclick="acceptDisclaimer()" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 hover:opacity-95 active:scale-[0.99] transition">
+                HO CAPITO
+            </button>
+        </div>
+    </div>
+
+    <!-- MODALE GODMODE ADMIN COMPLETO -->
+    <div id="admin-modal" class="fixed inset-0 bg-slate-950/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-amber-500/40 w-full max-w-lg rounded-2xl p-5 shadow-2xl relative flex flex-col max-h-[90vh]">
+            <div class="flex items-center justify-between mb-3 pb-3 border-b border-slate-700">
+                <h3 class="text-base font-bold text-amber-400 flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    GodMode (Pannello Amministratore)
+                </h3>
+                <button onclick="closeAdminModal()" class="text-slate-400 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <p class="text-xs text-slate-400 mb-3">Gestione rapida stalli: assegna o libera manualmente qualsiasi posto.</p>
+
+            <div class="flex-1 overflow-y-auto space-y-2 pr-1 no-scrollbar" id="admin-spots-list"></div>
+
+            <div class="mt-4 pt-3 border-t border-slate-700 flex justify-between gap-2">
+                <button onclick="adminResetAll()" class="py-2 px-3 bg-rose-500/20 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold hover:bg-rose-500/30 transition">
+                    ⚠️ Svuota Intero Parcheggio
+                </button>
+                <button onclick="closeAdminModal()" class="py-2 px-4 bg-slate-700 text-white rounded-xl text-xs font-semibold hover:bg-slate-600 transition">
+                    Chiudi Pannello
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER FISSO -->
+    <header class="bg-slate-800/90 backdrop-blur-md border-b border-slate-700/50 sticky top-0 z-40 px-4 py-3 flex items-center justify-between">
+        <div id="secret-admin-trigger" onclick="handleSecretTrigger()" class="flex items-center space-x-2 cursor-pointer select-none">
+            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            </div>
+            <div>
+                <h1 class="text-base font-bold tracking-tight text-white leading-tight">Parking Viale Piave</h1>
+                <p id="connection-status" class="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Cloud Sincronizzato
+                </p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span id="badge-liberi" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                -- Liberi
+            </span>
+        </div>
+    </header>
+
+    <!-- CONTENUTO PRINCIPALE (TAB) -->
+    <main class="flex-1 max-w-lg w-full mx-auto p-4 space-y-6">
+
+        <!-- TAB 1: HOME -->
+        <div id="tab-home" class="space-y-6">
+            <!-- Tachimetro -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6 shadow-xl backdrop-blur-sm text-center relative overflow-hidden">
+                <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none"></div>
+                <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase mb-2">Occupazione Totale</h2>
+                
+                <div class="relative w-64 h-36 mx-auto flex items-end justify-center overflow-hidden mb-2">
+                    <svg viewBox="0 0 200 110" class="w-full h-full">
+                        <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#334155" stroke-width="16" stroke-linecap="round" />
+                        <path id="tachometer-arc" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#6366f1" stroke-width="16" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="251.2" class="transition-all duration-700 ease-out" />
+                    </svg>
+                    <div class="absolute bottom-2 text-center">
+                        <span id="occupancy-count" class="text-4xl font-extrabold text-white tracking-tight">0</span>
+                        <span class="text-slate-400 text-sm font-medium"> / 61</span>
+                        <p id="occupancy-percent" class="text-xs text-indigo-400 font-semibold mt-0.5">0% Occupato</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-700/60">
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40 text-center">
+                        <span class="text-xs text-slate-400 block font-medium">Posti Liberi</span>
+                        <span id="stat-liberi" class="text-xl font-bold text-emerald-400">61</span>
+                    </div>
+                    <div class="bg-slate-900/50 p-3 rounded-xl border border-slate-700/40 text-center">
+                        <span class="text-xs text-slate-400 block font-medium">Posti Occupati</span>
+                        <span id="stat-occupati" class="text-xl font-bold text-rose-400">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SEZIONE DINAMICA HOME -->
+            <div id="home-action-box" class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-xl backdrop-blur-sm"></div>
+
+            <!-- PRESTO DISPONIBILI -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-lg">
+                <h3 class="text-sm font-bold text-slate-200 mb-3 flex items-center justify-between">
+                    <span>🕒 Presto Disponibili (In ordine di uscita)</span>
+                    <span class="text-[10px] text-slate-400 font-normal">Prossimi in liberazione</span>
+                </h3>
+                <div id="soon-available-list" class="space-y-2 max-h-48 overflow-y-auto no-scrollbar pr-1"></div>
+            </div>
+
+            <!-- Mini Griglia Rapida -->
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-lg">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-bold text-slate-200">Panoramica Stalli (1 - 61)</h3>
+                </div>
+                <div id="home-mini-grid" class="grid grid-cols-7 gap-1.5 max-h-52 overflow-y-auto no-scrollbar p-1"></div>
+            </div>
+        </div>
+
+        <!-- TAB 2: INGRESSO / USCITA -->
+        <div id="tab-action" class="hidden space-y-6">
+            <div id="action-tab-content" class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-xl backdrop-blur-sm"></div>
+        </div>
+
+        <!-- TAB 3: MAPPA COMPLETA -->
+        <div id="tab-map" class="hidden space-y-4">
+            <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-4 shadow-xl backdrop-blur-sm">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-base font-bold text-white">Mappa Completa Parcheggio</h2>
+                    <div class="flex items-center gap-3 text-xs">
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Libero</span>
+                        <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Occupato</span>
+                    </div>
+                </div>
+                <div id="full-map-grid" class="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[60vh] overflow-y-auto no-scrollbar p-1"></div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- NAVIGAZIONE IN BASSO -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur-lg border-t border-slate-800 z-50 flex items-stretch justify-around px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-2xl">
+        <button onclick="switchTab('home')" id="nav-home" class="flex-1 flex flex-col items-center justify-center py-2 text-indigo-400 transition hover:text-indigo-300">
+            <svg class="w-6 h-6 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            <span class="text-[11px] font-semibold">Home</span>
+        </button>
+        <button onclick="switchTab('action')" id="nav-action" class="flex-1 flex flex-col items-center justify-center py-2 text-slate-400 transition hover:text-slate-200">
+            <svg class="w-6 h-6 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <span class="text-[11px] font-semibold">Ingresso/Uscita</span>
+        </button>
+        <button onclick="switchTab('map')" id="nav-map" class="flex-1 flex flex-col items-center justify-center py-2 text-slate-400 transition hover:text-slate-200">
+            <svg class="w-6 h-6 mb-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-16zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-16z"/></svg>
+            <span class="text-[11px] font-semibold">Mappa</span>
+        </button>
+    </nav>
+
+    <!-- MODALE DETTAGLIO POSTO -->
+    <div id="spot-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-slate-800 border border-slate-700 w-full max-w-sm rounded-2xl p-5 shadow-2xl relative">
+            <button onclick="closeModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <h3 id="modal-title" class="text-lg font-bold text-white mb-3">Stallo #0</h3>
+            <div id="modal-content" class="space-y-2 text-sm text-slate-300 mb-4"></div>
+            <div class="flex gap-2">
+                <button id="modal-action-btn" class="flex-1 py-2.5 px-4 rounded-xl font-bold text-sm shadow-lg transition">Azione</button>
+                <button onclick="closeModal()" class="py-2.5 px-4 rounded-xl bg-slate-700 text-slate-200 font-semibold text-sm hover:bg-slate-600 transition">Chiudi</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT APPLICAZIONE -->
+    <script>
+        const SUPABASE_URL = 'https://yitrrxtmourecklpfbah.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_uboGdiRNKAOBePT_4WR1gw_Lmai_3s3';
+        const ADMIN_PIN = '52825282';
+        
+        let supabaseClient = null;
+        let isCloudConnected = false;
+        let adminClickCount = 0;
+        let adminClickTimer = null;
+        let activeAdminFormSpot = null;
+
+        let spotsData = {};
+        for (let i = 1; i <= 61; i++) {
+            spotsData[i] = { id: i, status: 'libero', name: '', surname: '', matricola: '', plate: '', exit_time: '', checkin_time: '' };
+        }
+        
+        const cached = localStorage.getItem('smartparking_61_data');
+        if (cached) {
+            try { spotsData = JSON.parse(cached); } catch(e){}
+        }
+
+        function acceptDisclaimer() {
+            document.getElementById('disclaimer-modal').classList.add('hidden');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('disclaimer-modal').classList.remove('hidden');
+            initApp();
+            setInterval(updateUI, 60000);
+        });
+
+        function handleSecretTrigger() {
+            adminClickCount++;
+            if (adminClickTimer) clearTimeout(adminClickTimer);
+
+            if (adminClickCount >= 5) {
+                adminClickCount = 0;
+                requestAdminAccess();
+            } else {
+                adminClickTimer = setTimeout(() => { adminClickCount = 0; }, 1000);
+            }
+        }
+
+        function requestAdminAccess() {
+            const pin = prompt("🔐 Inserisci PIN Amministratore:");
+            if (pin === ADMIN_PIN) {
+                openAdminModal();
+            } else if (pin !== null) {
+                alert("❌ PIN errato!");
+            }
+        }
+
+        function openAdminModal() {
+            try {
+                activeAdminFormSpot = null;
+                renderAdminList();
+                const modal = document.getElementById('admin-modal');
+                if (modal) {
+                    modal.classList.remove('hidden');
+                } else {
+                    alert("⚠️ Errore: Elemento admin-modal non trovato nel DOM.");
+                }
+            } catch (err) {
+                console.error("Errore GodMode:", err);
+                alert("⚠️ Errore apertura pannello admin: " + err.message);
+            }
+        }
+
+        function closeAdminModal() {
+            const modal = document.getElementById('admin-modal');
+            if (modal) modal.classList.add('hidden');
+        }
+
+        function formatCheckinTime(checkinTimeStr) {
+            if (!checkinTimeStr) return '-';
+            if (checkinTimeStr.includes('T') || checkinTimeStr.includes('-')) {
+                const d = new Date(checkinTimeStr);
+                if (!isNaN(d)) {
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+            }
+            return checkinTimeStr;
+        }
+
+        function renderAdminList() {
+            const container = document.getElementById('admin-spots-list');
+            if (!container) return;
+            container.innerHTML = '';
+
+            for (let i = 1; i <= 61; i++) {
+                const s = spotsData[i];
+                if (!s) continue;
+                const isOcc = s.status === 'occupato';
+                const div = document.createElement('div');
+                div.className = `p-2.5 rounded-xl border text-xs transition ${isOcc ? 'bg-rose-500/10 border-rose-500/30' : 'bg-slate-900/60 border-slate-700/50'}`;
+                
+                let dispExit = '-';
+                try {
+                    dispExit = getDisplayExitTime(s);
+                } catch(e) {
+                    dispExit = s.exit_time || '-';
+                }
+
+                let html = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-lg ${isOcc ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'} font-bold flex items-center justify-center">#${i}</span>
+                            <div>
+                                <span class="font-bold text-white">${isOcc ? (s.plate || s.name || 'Occupato') : 'Libero'}</span>
+                                <span class="text-[10px] text-slate-400 block">${isOcc ? 'Uscita: ' + (dispExit || '-') : 'Disponibile'}</span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1">
+                            ${isOcc 
+                                ? `<button onclick="adminForceCheckout(${i})" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-lg shadow transition">Forza Uscita</button>` 
+                                : `<button onclick="toggleAdminPopulateForm(${i})" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg shadow transition">+ Popola</button>`
+                            }
+                        </div>
+                    </div>
+                `;
+
+                if (!isOcc && activeAdminFormSpot === i) {
+                    html += `
+                        <form onsubmit="handleAdminPopulateSubmit(event, ${i})" class="mt-3 pt-3 border-t border-slate-700/60 space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="admin-plate-${i}" placeholder="Targa (es. AB123CD)" class="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg p-2 uppercase">
+                                <input type="text" id="admin-exit-${i}" required placeholder="Uscita HH:MM *" class="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg p-2">
+                            </div>
+                            <div class="flex items-center gap-4 py-1 text-slate-300 text-xs">
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="admin-day-${i}" value="oggi" checked class="accent-amber-500"> Oggi
+                                </label>
+                                <label class="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="radio" name="admin-day-${i}" value="domani" class="accent-amber-500"> Domani (+1)
+                                </label>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="admin-name-${i}" placeholder="Nome" class="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg p-2">
+                                <input type="text" id="admin-matricola-${i}" placeholder="Matricola" class="bg-slate-950 border border-slate-700 text-white text-xs rounded-lg p-2">
+                            </div>
+                            <div class="flex justify-end gap-2 pt-1">
+                                <button type="button" onclick="toggleAdminPopulateForm(null)" class="px-2 py-1 bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold">Annulla</button>
+                                <button type="submit" class="px-3 py-1 bg-amber-600 text-white rounded-lg text-xs font-bold shadow">Salva Auto</button>
+                            </div>
+                        </form>
+                    `;
+                }
+
+                div.innerHTML = html;
+                container.appendChild(div);
+
+                if (!isOcc && activeAdminFormSpot === i) {
+                    bindTimeFormat(`admin-exit-${i}`);
+                }
+            }
+        }
+
+        function toggleAdminPopulateForm(spotId) {
+            activeAdminFormSpot = (activeAdminFormSpot === spotId) ? null : spotId;
+            renderAdminList();
+        }
+
+        function normalizeTimeString(inputVal) {
+            let clean = inputVal.replace(/\D/g, '');
+            if (clean.length === 1) {
+                return '0' + clean + ':00';
+            } else if (clean.length === 2) {
+                return clean + ':00';
+            } else if (clean.length === 3) {
+                return '0' + clean.substring(0, 1) + ':' + clean.substring(1, 3);
+            } else if (clean.length >= 4) {
+                return clean.substring(0, 2) + ':' + clean.substring(2, 4);
+            }
+            return inputVal;
+        }
+
+        async function handleAdminPopulateSubmit(e, spotId) {
+            e.preventDefault();
+            const spot = spotsData[spotId];
+            if (!spot) return;
+
+            const plate = document.getElementById(`admin-plate-${spotId}`).value.trim().toUpperCase();
+            let rawExit = document.getElementById(`admin-exit-${spotId}`).value.trim();
+            let exitTime = normalizeTimeString(rawExit);
+
+            const dayChoice = document.querySelector(`input[name="admin-day-${spotId}"]:checked`).value;
+            if (dayChoice === 'domani' && !exitTime.includes('+1')) {
+                exitTime += ' (+1)';
+            }
+
+            const name = document.getElementById(`admin-name-${spotId}`).value.trim();
+            const matricola = document.getElementById(`admin-matricola-${spotId}`).value.trim();
+
+            spot.status = 'occupato';
+            spot.name = name || 'Admin Inserimento';
+            spot.surname = '';
+            spot.matricola = matricola;
+            spot.plate = plate || 'AUTO';
+            spot.exit_time = exitTime;
+            spot.checkin_time = new Date().toISOString();
+
+            await saveSpotToBackend(spotId);
+            activeAdminFormSpot = null;
+            renderAdminList();
+            updateUI();
+        }
+
+        async function adminForceCheckout(spotId) {
+            if (confirm(`Sei sicuro di voler liberare forzatamente lo Stallo #${spotId}?`)) {
+                const spot = spotsData[spotId];
+                spot.status = 'libero';
+                spot.name = ''; spot.surname = ''; spot.matricola = ''; spot.plate = ''; spot.exit_time = ''; spot.checkin_time = '';
+                
+                if (localStorage.getItem('my_assigned_spot') == spotId) {
+                    localStorage.removeItem('my_assigned_spot');
+                }
+
+                await saveSpotToBackend(spotId);
+                renderAdminList();
+                updateUI();
+            }
+        }
+
+        async function adminResetAll() {
+            if (confirm("ATTENZIONE: Stai per svuotare TUTTI i 61 stalli del parcheggio. Continuare?")) {
+                for (let i = 1; i <= 61; i++) {
+                    const spot = spotsData[i];
+                    spot.status = 'libero';
+                    spot.name = ''; spot.surname = ''; spot.matricola = ''; spot.plate = ''; spot.exit_time = ''; spot.checkin_time = '';
+                    await saveSpotToBackend(i);
+                }
+                localStorage.removeItem('my_assigned_spot');
+                renderAdminList();
+                updateUI();
+                alert("Parcheggio completamente resettato.");
+            }
+        }
+
+        // Funzione corretta e sicura per la pulizia automatica degli stalli scaduti da oltre 60 minuti
+        async function autoCleanupExpiredSpots() {
+            const now = new Date();
+            const toleranceMs = 60 * 60 * 1000; // 60 minuti di tolleranza
+
+            for (let i = 1; i <= 61; i++) {
+                const spot = spotsData[i];
+                if (spot && spot.status === 'occupato') {
+                    // Controlliamo che esista un checkin_time valido prima di valutare la scadenza
+                    if (!spot.checkin_time) continue;
+
+                    const target = getTargetExitDate(spot);
+                    if (target && !isNaN(target.getTime())) {
+                        // Libera lo stallo SOLO se l'orario di uscita + 60 minuti è REALMENTE minore di adesso
+                        if ((target.getTime() + toleranceMs) < now.getTime()) {
+                            spot.status = 'libero';
+                            spot.name = ''; spot.surname = ''; spot.matricola = ''; spot.plate = ''; spot.exit_time = ''; spot.checkin_time = '';
+                            if (localStorage.getItem('my_assigned_spot') == i) {
+                                localStorage.removeItem('my_assigned_spot');
+                            }
+                            await saveSpotToBackend(i);
+                        }
+                    }
+                }
+            }
+        }
+
+        try {
+            if (window.supabase) {
+                supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                isCloudConnected = true;
+            }
+        } catch(e) { isCloudConnected = false; }
+
+        async function initApp() {
+            if (isCloudConnected && supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('parking_spots').select('*');
+                    if (!error && data && data.length > 0) {
+                        data.forEach(item => {
+                            spotsData[item.id] = {
+                                id: item.id,
+                                status: item.status || 'libero',
+                                name: item.name || '',
+                                surname: item.surname || '',
+                                matricola: item.matricola || '',
+                                plate: item.plate || '',
+                                exit_time: item.exit_time || '',
+                                checkin_time: item.checkin_time || ''
+                            };
+                        });
+                        localStorage.setItem('smartparking_61_data', JSON.stringify(spotsData));
+                        document.getElementById('connection-status').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Cloud Sincronizzato';
+
+                        // Esegui la pulizia automatica silenziosa protetta
+                        await autoCleanupExpiredSpots();
+
+                    } else {
+                        await syncAllToCloud();
+                    }
+
+                    supabaseClient
+                        .channel('public:parking_spots')
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'parking_spots' }, payload => {
+                            const updated = payload.new;
+                            if (updated && updated.id) {
+                                spotsData[updated.id] = {
+                                    id: updated.id,
+                                    status: updated.status || 'libero',
+                                    name: updated.name || '',
+                                    surname: updated.surname || '',
+                                    matricola: updated.matricola || '',
+                                    plate: updated.plate || '',
+                                    exit_time: updated.exit_time || '',
+                                    checkin_time: updated.checkin_time || ''
+                                };
+                                localStorage.setItem('smartparking_61_data', JSON.stringify(spotsData));
+                                updateUI();
+                            }
+                        })
+                        .subscribe();
+                } catch (err) {
+                    loadLocalFallback();
+                }
+            } else {
+                loadLocalFallback();
+            }
+            updateUI();
+        }
+
+        function loadLocalFallback() {
+            isCloudConnected = false;
+            document.getElementById('connection-status').innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Modalità Locale';
+        }
+
+        async function saveSpotToBackend(spotId) {
+            localStorage.setItem('smartparking_61_data', JSON.stringify(spotsData));
+            const spot = spotsData[spotId];
+            if (isCloudConnected && supabaseClient) {
+                try {
+                    await supabaseClient.from('parking_spots').upsert({
+                        id: spot.id,
+                        status: spot.status,
+                        name: spot.name,
+                        surname: spot.surname,
+                        matricola: spot.matricola,
+                        plate: spot.plate,
+                        exit_time: spot.exit_time,
+                        checkin_time: spot.checkin_time
+                    });
+                } catch(e) { console.error('Errore cloud:', e); }
+            }
+        }
+
+        async function syncAllToCloud() {
+            if (!supabaseClient) return;
+            for (let i = 1; i <= 61; i++) {
+                const spot = spotsData[i];
+                await supabaseClient.from('parking_spots').upsert(spot);
+            }
+        }
+
+        function switchTab(tabName) {
+            ['home', 'action', 'map'].forEach(t => {
+                document.getElementById(`tab-${t}`).classList.add('hidden');
+                document.getElementById(`nav-${t}`).classList.remove('text-indigo-400');
+                document.getElementById(`nav-${t}`).classList.add('text-slate-400');
+            });
+            document.getElementById(`tab-${tabName}`).classList.remove('hidden');
+            document.getElementById(`nav-${tabName}`).classList.remove('text-slate-400');
+            document.getElementById(`nav-${tabName}`).classList.add('text-indigo-400');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function getTargetExitDate(spot) {
+            if (!spot || !spot.exit_time) return null;
+
+            const isNextDayExplicit = spot.exit_time.includes('+1') || spot.exit_time.toLowerCase().includes('domani');
+            const cleanTime = spot.exit_time.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
+
+            if (!cleanTime.includes(':')) return null;
+            const parts = cleanTime.split(':');
+            const targetHours = parseInt(parts[0], 10);
+            const targetMinutes = parseInt(parts[1], 10);
+
+            if (isNaN(targetHours) || isNaN(targetMinutes)) return null;
+
+            let baseDate = new Date();
+            if (spot.checkin_time && typeof spot.checkin_time === 'string' && (spot.checkin_time.includes('T') || spot.checkin_time.includes('-'))) {
+                const checkinDateObj = new Date(spot.checkin_time);
+                if (!isNaN(checkinDateObj.getTime())) {
+                    baseDate = checkinDateObj;
+                }
+            }
+
+            const target = new Date(baseDate);
+            target.setHours(targetHours, targetMinutes, 0, 0);
+
+            if (isNextDayExplicit || target <= baseDate) {
+                target.setDate(target.getDate() + 1);
+            }
+
+            return target;
+        }
+
+        function getDisplayExitTime(spot) {
+            if (!spot || !spot.exit_time) return '-';
+            const target = getTargetExitDate(spot);
+            if (!target) return spot.exit_time;
+
+            const now = new Date();
+            const cleanTime = spot.exit_time.replace(/\(\+1\)/g, '').replace(/\+1/g, '').replace(/domani/gi, '').trim();
+
+            const isToday = (target.getFullYear() === now.getFullYear() &&
+                             target.getMonth() === now.getMonth() &&
+                             target.getDate() === now.getDate());
+
+            if (isToday) {
+                return cleanTime; 
+            } else {
+                return cleanTime + ' (+1)';
+            }
+        }
+
+        function calculateRemainingTime(spot) {
+            const target = getTargetExitDate(spot);
+            if (!target) return 'N/D';
+
+            const now = new Date();
+            let diffMs = target - now;
+            if (diffMs <= 0) return 'Orario superato';
+
+            let totalMin = Math.floor(diffMs / (1000 * 60));
+            let hrs = Math.floor(totalMin / 60);
+            let mins = totalMin % 60;
+
+            if (hrs > 0) return `${hrs}h ${mins}m rimasti`;
+            return `${mins} min rimasti`;
+        }
+
+        function getMyAssignedSpot() {
+            const spotId = localStorage.getItem('my_assigned_spot');
+            if (spotId && spotsData[spotId] && spotsData[spotId].status === 'occupato') {
+                return spotId;
+            }
+            localStorage.removeItem('my_assigned_spot');
+            return null;
+        }
+
+        function updateUI() {
+            let occupati = 0;
+            for (let i = 1; i <= 61; i++) {
+                if (spotsData[i] && spotsData[i].status === 'occupato') occupati++;
+            }
+            let liberi = 61 - occupati;
+            let percent = Math.round((occupati / 61) * 100);
+
+            document.getElementById('badge-liberi').innerText = `${liberi} Liberi`;
+            document.getElementById('occupancy-count').innerText = occupati;
+            document.getElementById('occupancy-percent').innerText = `${percent}% Occupato`;
+            document.getElementById('stat-liberi').innerText = liberi;
+            document.getElementById('stat-occupati').innerText = occupati;
+
+            const dashoffset = 251.2 - (251.2 * percent) / 100;
+            const arc = document.getElementById('tachometer-arc');
+            if(arc) arc.style.strokeDashoffset = dashoffset;
+
+            renderHomeActionBox();
+            renderActionTab();
+            renderMiniGrid();
+            renderFullMap();
+            renderSoonAvailable();
+            
+            const adminModal = document.getElementById('admin-modal');
+            if (adminModal && !adminModal.classList.contains('hidden')) {
+                renderAdminList();
+            }
+        }
+
+        function renderHomeActionBox() {
+            const container = document.getElementById('home-action-box');
+            const mySpotId = getMyAssignedSpot();
+
+            if (mySpotId) {
+                const s = spotsData[mySpotId];
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
+                container.innerHTML = `
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-bold text-rose-400 flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                            Check-Out Rapido (Stallo #${mySpotId})
+                        </h3>
+                        <span class="text-[10px] bg-rose-500/20 text-rose-300 font-semibold px-2 py-0.5 rounded-full border border-rose-500/30">Attivo</span>
+                    </div>
+                    <div class="bg-slate-900/80 p-3 rounded-xl border border-slate-700/60 mb-3 space-y-1 text-xs text-slate-300">
+                        <div class="flex justify-between"><span>Targa / Info:</span> <strong class="text-white">${s.plate || s.name || 'Tua auto'}</strong></div>
+                        <div class="flex justify-between"><span>Orario Uscita:</span> <strong class="text-white">${dispExit || 'Non specificato'}</strong></div>
+                        <div class="flex justify-between text-emerald-400 font-semibold"><span>Tempo Residuo:</span> <span>${remTime}</span></div>
+                    </div>
+                    <button onclick="performCheckout(${mySpotId})" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-sm shadow-lg shadow-rose-600/30 hover:opacity-95 active:scale-[0.99] transition">
+                        Effettua Check-Out (Libera Stallo #${mySpotId})
+                    </button>
+                `;
+            } else {
+                container.innerHTML = `
+                    <h3 class="text-sm font-bold text-white mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                        Check-In Rapido (Assegna 1° Libero)
+                    </h3>
+                    <form onsubmit="handleQuickCheckIn(event)" class="space-y-3">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">Orario d'uscita indicativo *</label>
+                            <input type="text" id="quick-exit-time" required inputmode="numeric" placeholder="HH:MM (es. 17:30 o 11)" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                        </div>
+                        <div class="flex items-center gap-6 py-1 text-slate-300 text-xs">
+                            <label class="flex items-center gap-2 cursor-pointer font-medium">
+                                <input type="radio" name="quick-day" value="oggi" checked class="w-4 h-4 accent-emerald-500"> Oggi
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer font-medium">
+                                <input type="radio" name="quick-day" value="domani" class="w-4 h-4 accent-emerald-500"> Domani (+1)
+                            </label>
+                        </div>
+                        <button type="submit" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-sm shadow-lg shadow-emerald-600/30 hover:opacity-95 active:scale-[0.99] transition">
+                            ⚡ Check-In Rapido Automatico
+                        </button>
+                    </form>
+                `;
+                bindTimeFormat('quick-exit-time');
+            }
+        }
+
+        function renderActionTab() {
+            const container = document.getElementById('action-tab-content');
+            const mySpotId = getMyAssignedSpot();
+
+            if (mySpotId) {
+                const s = spotsData[mySpotId];
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
+                const dispCheckin = formatCheckinTime(s.checkin_time);
+                container.innerHTML = `
+                    <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-rose-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                        Gestione Sosta Attiva
+                    </h2>
+                    <div class="bg-slate-900/90 p-4 rounded-xl border border-slate-700/60 mb-4 space-y-2 text-sm text-slate-300">
+                        <p class="flex justify-between border-b border-slate-800 pb-2"><strong class="text-slate-400">Stallo Assegnato:</strong> <span class="text-indigo-400 font-bold text-base">#${mySpotId}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Nome:</strong> <span>${s.name || '-'} ${s.surname || ''}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Matricola:</strong> <span>${s.matricola || '-'}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Targa:</strong> <span class="font-mono text-white">${s.plate || '-'}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Orario Check-In:</strong> <span>${dispCheckin || '-'}</span></p>
+                        <p class="flex justify-between"><strong class="text-slate-400">Uscita Prevista:</strong> <span>${dispExit || '-'}</span></p>
+                        <p class="flex justify-between pt-2 border-t border-slate-800 font-bold text-emerald-400"><span>Tempo Residuo:</span> <span>${remTime}</span></p>
+                    </div>
+                    <button onclick="performCheckout(${mySpotId})" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 text-white font-bold text-sm shadow-lg shadow-rose-600/35 hover:opacity-95 active:scale-[0.99] transition">
+                        Effettua Check-Out
+                    </button>
+                `;
+            } else {
+                let optionsHtml = '<option value="">-- Scegli uno stallo (1-61) o automatico --</option><option value="auto">⚡ Assegna automaticamente (Primo libero)</option>';
+                for (let i = 1; i <= 61; i++) {
+                    const s = spotsData[i];
+                    if (s.status === 'libero') {
+                        optionsHtml += `<option value="${i}">Stallo #${i} - Libero</option>`;
+                    }
+                }
+
+                container.innerHTML = `
+                    <h2 class="text-base font-bold text-white mb-4 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                        Nuovo Check-In
+                    </h2>
+                    <form onsubmit="handleManualCheckIn(event)" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">Selezione Stallo *</label>
+                            <select id="input-spot" required class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                                ${optionsHtml}
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Nome</label>
+                                <input type="text" id="input-name" placeholder="Es. Mario" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Cognome</label>
+                                <input type="text" id="input-surname" placeholder="Es. Rossi" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Matricola</label>
+                                <input type="text" id="input-matricola" placeholder="Es. M12345" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Targa Auto</label>
+                                <input type="text" id="input-plate" placeholder="Es. AB123CD" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Orario d'uscita indicativo *</label>
+                            <input type="text" id="input-exit-time" required inputmode="numeric" placeholder="HH:MM (es. 18:30 o 18)" class="w-full bg-slate-900/90 border border-slate-700 text-white text-sm rounded-xl px-3.5 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        </div>
+                        <div class="flex items-center gap-6 py-1 text-slate-300 text-xs">
+                            <label class="flex items-center gap-2 cursor-pointer font-medium">
+                                <input type="radio" name="manual-day" value="oggi" checked class="w-4 h-4 accent-indigo-500"> Oggi
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer font-medium">
+                                <input type="radio" name="manual-day" value="domani" class="w-4 h-4 accent-indigo-500"> Domani (+1)
+                            </label>
+                        </div>
+                        <button type="submit" class="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 hover:opacity-95 active:scale-[0.99] transition">
+                            Effettua Check-In
+                        </button>
+                    </form>
+                `;
+                bindTimeFormat('input-exit-time');
+            }
+        }
+
+        async function handleQuickCheckIn(e) {
+            e.preventDefault();
+            if (getMyAssignedSpot()) { alert('Hai già un check-in attivo!'); return; }
+
+            let rawExit = document.getElementById('quick-exit-time').value.trim();
+            let exitTime = normalizeTimeString(rawExit);
+
+            const dayChoice = document.querySelector('input[name="quick-day"]:checked').value;
+            if (dayChoice === 'domani' && !exitTime.includes('+1')) {
+                exitTime += ' (+1)';
+            }
+
+            let freeSpotId = null;
+            for (let i = 1; i <= 61; i++) {
+                if (spotsData[i] && spotsData[i].status === 'libero') { freeSpotId = i; break; }
+            }
+
+            if (!freeSpotId) { alert('Attenzione: Tutti i 61 stalli sono attualmente occupati!'); return; }
+
+            const spot = spotsData[freeSpotId];
+            spot.status = 'occupato';
+            spot.name = 'Collega';
+            spot.surname = '';
+            spot.matricola = '';
+            spot.plate = 'AUTO';
+            spot.exit_time = exitTime;
+            spot.checkin_time = new Date().toISOString();
+
+            localStorage.setItem('my_assigned_spot', freeSpotId);
+            await saveSpotToBackend(freeSpotId);
+            updateUI();
+        }
+
+        async function handleManualCheckIn(e) {
+            e.preventDefault();
+            if (getMyAssignedSpot()) { alert('Hai già un check-in attivo!'); return; }
+
+            let spotId = document.getElementById('input-spot').value;
+            if (!spotId) return;
+
+            if (spotId === 'auto') {
+                let foundSpot = null;
+                for (let i = 1; i <= 61; i++) {
+                    if (spotsData[i] && spotsData[i].status === 'libero') { foundSpot = i; break; }
+                }
+                if (!foundSpot) { alert('Tutti i 61 stalli sono occupati!'); return; }
+                spotId = foundSpot;
+            }
+
+            let rawExit = document.getElementById('input-exit-time').value.trim();
+            let exitTime = normalizeTimeString(rawExit);
+
+            const dayChoice = document.querySelector('input[name="manual-day"]:checked').value;
+            if (dayChoice === 'domani' && !exitTime.includes('+1')) {
+                exitTime += ' (+1)';
+            }
+
+            const spot = spotsData[spotId];
+            spot.status = 'occupato';
+            spot.name = document.getElementById('input-name').value.trim();
+            spot.surname = document.getElementById('input-surname').value.trim();
+            spot.matricola = document.getElementById('input-matricola').value.trim();
+            spot.plate = document.getElementById('input-plate').value.trim().toUpperCase();
+            spot.exit_time = exitTime;
+            spot.checkin_time = new Date().toISOString();
+
+            localStorage.setItem('my_assigned_spot', spotId);
+            await saveSpotToBackend(spotId);
+            updateUI();
+            switchTab('home');
+        }
+
+        async function performCheckout(spotId) {
+            const spot = spotsData[spotId];
+            if (!spot) return;
+
+            spot.status = 'libero';
+            spot.name = ''; spot.surname = ''; spot.matricola = ''; spot.plate = ''; spot.exit_time = ''; spot.checkin_time = '';
+
+            localStorage.removeItem('my_assigned_spot');
+            await saveSpotToBackend(spotId);
+            closeModal();
+            updateUI();
+        }
+
+        function renderSoonAvailable() {
+            const container = document.getElementById('soon-available-list');
+            container.innerHTML = '';
+
+            let occupiedList = [];
+            for (let i = 1; i <= 61; i++) {
+                const s = spotsData[i];
+                if (s.status === 'occupato' && s.exit_time) {
+                    occupiedList.push(s);
+                }
+            }
+
+            occupiedList.sort((a, b) => {
+                const targetA = getTargetExitDate(a);
+                const targetB = getTargetExitDate(b);
+
+                if (targetA && targetB) {
+                    return targetA - targetB;
+                }
+                return 0;
+            });
+
+            if (occupiedList.length === 0) {
+                container.innerHTML = '<p class="text-xs text-slate-400 text-center py-2">Nessun orario di uscita registrato al momento.</p>';
+                return;
+            }
+
+            occupiedList.forEach(s => {
+                const dispExit = getDisplayExitTime(s);
+                const btn = document.createElement('button');
+                btn.className = 'w-full flex items-center justify-between bg-slate-900/60 hover:bg-slate-800/80 border border-slate-700/50 p-2.5 rounded-xl text-xs transition text-left cursor-pointer';
+                btn.onclick = () => openModal(s.id);
+                btn.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-300 font-bold flex items-center justify-center">#${s.id}</span>
+                        <div>
+                            <span class="font-semibold text-white">${s.plate || s.name || 'Auto'}</span>
+                            <span class="text-[10px] text-slate-400 block">${s.name ? s.name + ' ' + (s.surname || '') : ''}</span>
+                        </div>
+                    </div>
+                    <div class="text-right flex items-center gap-1.5">
+                        <span class="font-bold text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">
+                            Uscita: ${dispExit}
+                        </span>
+                    </div>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function renderMiniGrid() {
+            const container = document.getElementById('home-mini-grid');
+            container.innerHTML = '';
+            for (let i = 1; i <= 61; i++) {
+                const s = spotsData[i];
+                const btn = document.createElement('button');
+                const isOcc = s.status === 'occupato';
+                btn.className = `h-9 rounded-lg font-bold text-xs flex flex-col items-center justify-center transition border ${isOcc ? 'bg-rose-500/20 border-rose-500/40 text-rose-300' : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'}`;
+                btn.innerHTML = `<span>${i}</span>`;
+                btn.onclick = () => openModal(i);
+                container.appendChild(btn);
+            }
+        }
+
+        function renderFullMap() {
+            const container = document.getElementById('full-map-grid');
+            container.innerHTML = '';
+            for (let i = 1; i <= 61; i++) {
+                const s = spotsData[i];
+                const btn = document.createElement('button');
+                const isOcc = s.status === 'occupato';
+                btn.className = `p-2.5 rounded-xl text-left transition border flex flex-col justify-between min-h-[64px] ${isOcc ? 'bg-rose-500/20 border-rose-500/40 text-rose-200' : 'bg-slate-900/60 border-slate-700/60 text-slate-300 hover:border-slate-500'}`;
+                btn.innerHTML = `
+                    <div class="flex items-center justify-between w-full">
+                        <span class="font-extrabold text-xs text-white">#${i}</span>
+                        <span class="w-2 h-2 rounded-full ${isOcc ? 'bg-rose-500' : 'bg-emerald-500'}"></span>
+                    </div>
+                    <div class="text-[10px] truncate mt-1 font-medium ${isOcc ? 'text-rose-300' : 'text-slate-400'}">
+                        ${isOcc ? (s.plate || s.name || 'Occupato') : 'Libero'}
+                    </div>
+                `;
+                btn.onclick = () => openModal(i);
+                container.appendChild(btn);
+            }
+        }
+
+        function openModal(spotId) {
+            const s = spotsData[spotId];
+            const mySpotId = getMyAssignedSpot();
+            document.getElementById('modal-title').innerText = `Stallo #${spotId}`;
+            const content = document.getElementById('modal-content');
+            const actionBtn = document.getElementById('modal-action-btn');
+
+            if (s.status === 'occupato') {
+                const remTime = calculateRemainingTime(s);
+                const dispExit = getDisplayExitTime(s);
+                const dispCheckin = formatCheckinTime(s.checkin_time);
+                content.innerHTML = `
+                    <p><strong class="text-slate-400">Stato:</strong> <span class="text-rose-400 font-semibold">Occupato</span></p>
+                    <p><strong class="text-slate-400">Nome:</strong> ${s.name || '-'}</p>
+                    <p><strong class="text-slate-400">Cognome:</strong> ${s.surname || '-'}</p>
+                    <p><strong class="text-slate-400">Matricola:</strong> ${s.matricola || '-'}</p>
+                    <p><strong class="text-slate-400">Targa:</strong> <span class="font-mono bg-slate-900 px-1.5 py-0.5 rounded text-white">${s.plate || '-'}</span></p>
+                    <p><strong class="text-slate-400">Check-In:</strong> ${dispCheckin || '-'}</p>
+                    <p><strong class="text-slate-400">Uscita prevista:</strong> <span class="text-emerald-400 font-bold">${dispExit || '-'}</span></p>
+                    <p><strong class="text-slate-400">Tempo residuo:</strong> <span class="text-indigo-300 font-semibold">${remTime}</span></p>
+                `;
+
+                if (String(mySpotId) === String(spotId)) {
+                    actionBtn.innerText = 'Effettua Check-Out (Tuo Posto)';
+                    actionBtn.className = 'flex-1 py-2.5 px-4 rounded-xl bg-rose-600 text-white font-bold text-sm shadow-lg shadow-rose-600/30 hover:bg-rose-500 transition';
+                    actionBtn.onclick = () => performCheckout(spotId);
+                } else {
+                    actionBtn.innerText = 'Stallo Occupato';
+                    actionBtn.className = 'flex-1 py-2.5 px-4 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed';
+                    actionBtn.onclick = null;
+                }
+            } else {
+                content.innerHTML = `
+                    <p><strong class="text-slate-400">Stato:</strong> <span class="text-emerald-400 font-semibold">Libero</span></p>
+                    <p class="text-xs text-slate-400 mt-2">Questo posto è attualmente disponibile.</p>
+                `;
+                if (!mySpotId) {
+                    actionBtn.innerText = 'Vai a Check-In';
+                    actionBtn.className = 'flex-1 py-2.5 px-4 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 transition';
+                    actionBtn.onclick = () => {
+                        closeModal();
+                        switchTab('action');
+                    };
+                } else {
+                    actionBtn.innerText = 'Hai già un posto assegnato';
+                    actionBtn.className = 'flex-1 py-2.5 px-4 rounded-xl bg-slate-700 text-slate-400 font-bold text-sm cursor-not-allowed';
+                    actionBtn.onclick = null;
+                }
+            }
+
+            document.getElementById('spot-modal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('spot-modal').classList.add('hidden');
+        }
+
+        function bindTimeFormat(elementId) {
+            const el = document.getElementById(elementId);
+            if (el) {
+                el.addEventListener('input', function(e) {
+                    let v = e.target.value.replace(/\D/g, '');
+                    if (v.length >= 3) {
+                        e.target.value = v.substring(0, 2) + ':' + v.substring(2, 4);
+                    } else {
+                        e.target.value = v;
+                    }
+                });
+
+                el.addEventListener('blur', function(e) {
+                    let v = e.target.value.trim();
+                    if (v && !v.includes(':')) {
+                        e.target.value = normalizeTimeString(v);
+                    }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
